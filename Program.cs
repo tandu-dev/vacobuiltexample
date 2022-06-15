@@ -1,53 +1,76 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
+
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<TodoDb>(opt => opt.UseInMemoryDatabase("TodoList"));
+builder.Services.AddDbContext<BlogDb>(opt => opt.UseInMemoryDatabase("PostList"));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+
+
 var app = builder.Build();
 
 app.MapGet("/", () => "Hello World!");
 
-app.MapGet("/todoitems", async (TodoDb db) =>
-    await db.Todos.ToListAsync());
+app.MapGet("/posts", async (BlogDb db) =>
+    await db.Posts.ToListAsync());
 
-app.MapGet("/todoitems/complete", async (TodoDb db) =>
-    await db.Todos.Where(t => t.IsComplete).ToListAsync());
+app.MapGet("/categories", async (BlogDb db) =>{
+        if (!db.Categories.Any())
+            {
+                List<Category> categories = new List<Category>() {
+                    new Category{categoryId = 1, CategoryName = "General"},
+                        new Category {categoryId = 2, CategoryName = "Technology"},
+                        new Category {categoryId = 3, CategoryName = "Random"}
+                };
+                db.Categories.AddRange(categories);
+            }
 
-app.MapGet("/todoitems/{id}", async (int id, TodoDb db) =>
-    await db.Todos.FindAsync(id)
-        is Todo todo
-            ? Results.Ok(todo)
+        await db.Categories.ToListAsync();
+        }
+    );
+
+app.MapGet("/posts/{id}", async (int id, BlogDb db) =>
+    await db.Posts.FindAsync(id)
+        is Post post
+            ? Results.Ok(post)
             : Results.NotFound());
 
-app.MapPost("/todoitems", async (Todo todo, TodoDb db) =>
+app.MapPost("/posts", async (Post post, BlogDb db) =>
 {
-    db.Todos.Add(todo);
+    if(post.CategoryId == 0 || post.CategoryId > 3 ||
+    String.IsNullOrWhiteSpace(post.Title) ||
+    String.IsNullOrWhiteSpace(post.Contents))
+        throw new BadHttpRequestException("Title, Contents, and Category Cannot be null", 400);
+    db.Posts.Add(post);
     await db.SaveChangesAsync();
 
-    return Results.Created($"/todoitems/{todo.Id}", todo);
+    return Results.Created($"/posts/{post.Id}", post);
 });
 
-app.MapPut("/todoitems/{id}", async (int id, Todo inputTodo, TodoDb db) =>
+app.MapPut("/posts/{id}", async (int id, Post inputPost, BlogDb db) =>
 {
-    var todo = await db.Todos.FindAsync(id);
+    var post = await db.Posts.FindAsync(id);
 
-    if (todo is null) return Results.NotFound();
+    if (post is null) return Results.NotFound();
 
-    todo.Name = inputTodo.Name;
-    todo.IsComplete = inputTodo.IsComplete;
+    post.Title = inputPost.Title;
+    post.Contents = inputPost.Contents;
+    post.CategoryId = inputPost.CategoryId;
+    post.Timestamp = inputPost.Timestamp;
 
     await db.SaveChangesAsync();
 
-    return Results.Created($"/todoitems/{todo.Id}", todo);
+    return Results.Created($"/posts/{post.Id}", post);
 });
 
-app.MapDelete("/todoitems/{id}", async (int id, TodoDb db) =>
+app.MapDelete("/posts/{id}", async (int id, BlogDb db) =>
 {
-    if (await db.Todos.FindAsync(id) is Todo todo)
+    if (await db.Posts.FindAsync(id) is Post post)
     {
-        db.Todos.Remove(todo);
+        db.Posts.Remove(post);
         await db.SaveChangesAsync();
-        return Results.Ok(todo);
+        return Results.Ok(post);
     }
 
     return Results.NotFound();
@@ -55,17 +78,38 @@ app.MapDelete("/todoitems/{id}", async (int id, TodoDb db) =>
 
 app.Run();
 
-class Todo
+public class Post
 {
     public int Id { get; set; }
-    public string? Name { get; set; }
-    public bool IsComplete { get; set; }
+    public string? Title { get; set; }
+    public string? Contents { get; set; }
+    public DateTime Timestamp {get; set;}
+    public int CategoryId {get; set;}
+}
+public class Category {
+    public int categoryId {get; set;}
+
+    public string? CategoryName {get;set;}
 }
 
-class TodoDb : DbContext
+public class BlogDb : DbContext
 {
-    public TodoDb(DbContextOptions<TodoDb> options)
+    public BlogDb(DbContextOptions<BlogDb> options)
         : base(options) { }
 
-    public DbSet<Todo> Todos => Set<Todo>();
+    protected override void OnModelCreating(ModelBuilder modelbuilder)
+    {
+        base.OnModelCreating(modelbuilder);
+       
+        modelbuilder.Entity<Category>().HasData(
+                    new Category{categoryId = 1, CategoryName = "General"},
+                    new Category {categoryId = 2, CategoryName = "Technology"},
+                    new Category {categoryId = 3, CategoryName = "Random"}
+        );
+        
+    }
+    public DbSet<Post> Posts => Set<Post>();
+    public DbSet<Category> Categories => Set<Category>();
+
+    
 }
