@@ -24,9 +24,10 @@ app.MapGet("/categories", async (BlogDb db) =>{
                         new Category {categoryId = 3, CategoryName = "Random"}
                 };
                 db.Categories.AddRange(categories);
+                db.SaveChanges();
             }
 
-        await db.Categories.ToListAsync();
+        return await db.Categories.ToListAsync();
         }
     );
 
